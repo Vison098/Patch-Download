@@ -1,0 +1,320 @@
+目前NS版和PC版的文本封装模式相通，所以搞定一个等于搞定两。
+打开script，有3000多个sc和csv文件，其中sc包含脚本演出信息，真正修改后有用的是csv
+
+使用powershell批量改名
+# csv批量重命名txt
+Set-Location "你的文件夹路径"
+Get-ChildItem *.csv | Rename-Item -NewName { $_.Name -replace '\.csv$','.txt' }
+# txt批量重命名csv（待后面改回用）
+Set-Location "你的文件夹路径"
+Get-ChildItem *.txt | Rename-Item -NewName { $_.Name -replace '\.txt$','.csv' }
+
+观察txt是UTF-16 LE BOM编码，改为UTF 8方便文本处理
+#UTF-16 LE BOM的TXT文件转换为UTF-8
+$inputFolder = "C:\Users\Vison\Desktop\本体utf16txt"
+$outputFolder = "C:\Users\Vison\Desktop\本体utf8txt"
+
+if (!(Test-Path $outputFolder)) {
+    New-Item -ItemType Directory -Path $outputFolder
+}
+
+Get-ChildItem -Path $inputFolder -Filter *.txt | ForEach-Object {
+    $content = Get-Content -Path $_.FullName -Encoding Unicode
+    $outputPath = Join-Path -Path $outputFolder -ChildPath $_.Name
+    $content | Out-File -FilePath $outputPath -Encoding utf8
+}
+
+#UTF-8转换回UTF-16 LE BOM（待后面用）
+$inputFolder = "C:\Users\Vison\Desktop\还原"
+$outputFolder = "C:\Users\Vison\Desktop\utf16"
+
+if (!(Test-Path $outputFolder)) {
+    New-Item -ItemType Directory -Path $outputFolder
+}
+
+Get-ChildItem -Path $inputFolder -Filter *.txt | ForEach-Object {
+    $content = Get-Content -Path $_.FullName -Encoding UTF8
+    $outputPath = Join-Path -Path $outputFolder -ChildPath $_.Name
+    $content | Out-File -FilePath $outputPath -Encoding Unicode  # Unicode在Windows中代表UTF-16 LE with BOM
+}
+
+观察txt里的文本格式，发现它在很诡异的地方断行，进入游戏对照后发现都是在游戏内文本换行的地方断开的
+实际上每一句话的分割符是,
+为此准备Python脚本，它能以,符号去分割形成json文本（后面有封回用脚本）
+
+import os
+import json
+
+# --- 配置区 ---
+input_folder = 'text_files'
+output_folder = 'json_output'
+
+# --- 核心逻辑 ---
+
+def process_file(input_filepath, output_filepath):
+    """
+    处理单个文本文件并生成对应的 JSON 文件。
+    此版本回归最简单、最可靠的逻辑：直接使用半角逗号 ',' 进行分割。
+    """
+    print(f"正在处理: {input_filepath} ...")
+    
+    try:
+        # 1. 读取原始文本文件，并将所有内容合并为一行
+        with open(input_filepath, 'r', encoding='utf-8') as f:
+            processed_text = f.read().replace('\n', '')
+
+        # 2. 关键步骤：直接使用半角逗号进行分割！
+        #    这是最直接、最符合您要求的做法。
+        #    不再需要任何复杂的正则表达式。
+        sentences = processed_text.split(',')
+
+        # 3. 构建并写入 JSON
+        result_list = []
+        for sentence in sentences:
+            # 去除分割后可能产生的前后空白
+            cleaned_sentence = sentence.strip()
+            # 确保不添加空的 message (例如由文末的逗号产生)
+            if cleaned_sentence:
+                result_list.append({"message": cleaned_sentence})
+
+        with open(output_filepath, 'w', encoding='utf-8') as f:
+            json.dump(result_list, f, ensure_ascii=False, indent=4)
+        
+        print(f"成功 -> {output_filepath}")
+
+    except Exception as e:
+        print(f"处理文件 {input_filepath} 时发生错误: {e}")
+
+
+# --- 主程序入口 ---
+if __name__ == "__main__":
+    if not os.path.isdir(input_folder):
+        print(f"错误：输入文件夹 '{input_folder}' 不存在。")
+        exit()
+
+    os.makedirs(output_folder, exist_ok=True)
+    
+    file_count = 0
+    for filename in os.listdir(input_folder):
+        if filename.endswith('.txt'):
+            file_count += 1
+            input_path = os.path.join(input_folder, filename)
+            base_name = os.path.splitext(filename)[0]
+            output_filename = f"{base_name}.json"
+            output_path = os.path.join(output_folder, output_filename)
+            process_file(input_path, output_path)
+
+    if file_count == 0:
+        print(f"在文件夹 '{input_folder}' 中没有找到任何 .txt 文件。")
+    else:
+        print(f"\n批量处理完成！共处理了 {file_count} 个文件。")
+        print(f"所有 JSON 文件已保存在 '{output_folder}' 文件夹中。")
+		
+import os
+import json
+
+# --- 配置区 ---
+# 输入文件夹：存放之前生成的 .json 文件
+input_folder = 'json_output'
+
+# 输出文件夹：存放还原后的 .txt 文件
+# 建议用一个新的文件夹名，以免覆盖你原始的 text_files
+output_folder = 'restored_txt'
+
+# --- 核心逻辑 ---
+
+def json_to_txt(input_filepath, output_filepath):
+    """
+    读取 JSON 文件，提取 message 内容，并用逗号拼接还原为 TXT。
+    """
+    print(f"正在还原: {input_filepath} ...")
+    
+    try:
+        # 1. 读取 JSON 文件
+        with open(input_filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # 2. 提取所有 message 字段的值
+        #    使用列表推导式快速获取所有文本片段
+        messages = [item.get('message', '') for item in data]
+
+        # 3. 核心步骤：使用半角逗号将片段拼接起来
+        #    这是 split(',') 的逆运算
+        restored_text = ",".join(messages)
+
+        # 4. 写入 TXT 文件
+        with open(output_filepath, 'w', encoding='utf-8') as f:
+            f.write(restored_text)
+        
+        print(f"成功 -> {output_filepath}")
+
+    except Exception as e:
+        print(f"还原文件 {input_filepath} 时发生错误: {e}")
+
+
+# --- 主程序入口 ---
+if __name__ == "__main__":
+    # 检查输入文件夹是否存在
+    if not os.path.isdir(input_folder):
+        print(f"错误：输入文件夹 '{input_folder}' 不存在。")
+        exit()
+
+    # 自动创建输出文件夹
+    os.makedirs(output_folder, exist_ok=True)
+    
+    file_count = 0
+    for filename in os.listdir(input_folder):
+        if filename.endswith('.json'):
+            file_count += 1
+            input_path = os.path.join(input_folder, filename)
+            
+            # 构建输出文件名 (例如: story1.json -> story1.txt)
+            base_name = os.path.splitext(filename)[0]
+            output_filename = f"{base_name}.txt"
+            output_path = os.path.join(output_folder, output_filename)
+            
+            json_to_txt(input_path, output_path)
+
+    if file_count == 0:
+        print(f"在文件夹 '{input_folder}' 中没有找到任何 .json 文件。")
+    else:
+        print(f"\n逆向还原完成！共处理了 {file_count} 个文件。")
+        print(f"还原的 TXT 文件已保存在 '{output_folder}' 文件夹中。")		
+
+在提取出json脚本后就可以回到处理文本的环节了。
+如果要封回，首先需在每26个字符后加回换行符（仅对话部分，文章部分不需要）
+使用Python脚本如下：
+import os
+import shutil
+import argparse
+import re
+import json
+
+def format_message_string(text, break_at=26):
+    """
+    对给定的字符串，在忽略控制代码的前提下，每N个可见字符插入一个'\\n'。
+    这个函数只处理纯字符串，不关心JSON格式。
+    """
+    # 1. 首先移除字符串中已有的'\n'，以便重新格式化
+    clean_text = text.replace('\n', '')
+    
+    # 2. 计算不包含控制代码的纯文本长度
+    visible_text = re.sub(r'#\w\(.*?\)', '', clean_text)
+    if len(visible_text) <= break_at:
+        return clean_text  # 如果文本不够长，返回清理后的文本
+
+    # 3. 逐个字符处理，构建新字符串
+    result_parts = []
+    visible_count = 0
+    i = 0
+    
+    while i < len(clean_text):
+        # 检查是否是控制代码
+        match = re.match(r'#\w\(.*?\)', clean_text[i:])
+        if match:
+            # 如果是控制代码，直接追加，不计入可见字符数
+            code_block = match.group(0)
+            result_parts.append(code_block)
+            i += len(code_block)
+        else:
+            # 如果是可见字符
+            char = clean_text[i]
+            result_parts.append(char)
+            visible_count += 1
+            
+            # 判断是否达到换行阈值
+            # 并且确保不在字符串的最后一个可见字符后添加换行
+            if (visible_count % break_at == 0) and (visible_count < len(visible_text)):
+                 result_parts.append('\n')
+            
+            i += 1
+    
+    return "".join(result_parts)
+
+def process_json_file(file_path, create_backup=False):
+    """
+    读取一个JSON文件，处理其中所有"message"字段的字符串，然后写回文件。
+    """
+    print(f"Processing: {file_path}")
+
+    if create_backup:
+        backup_path = file_path + '.bak'
+        try:
+            shutil.copy2(file_path, backup_path)
+            print(f"  -> Backup created: {backup_path}")
+        except Exception as e:
+            print(f"  -> ERROR creating backup for {file_path}. Skipping file. Error: {e}")
+            return
+
+    try:
+        # 以UTF-8编码读取和解析JSON文件
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # 假设JSON的顶层是一个列表
+        if isinstance(data, list):
+            for item in data:
+                # 检查每个项目是否是字典，并且包含'message'键
+                if isinstance(item, dict) and 'message' in item:
+                    original_message = item['message']
+                    # 仅对message的值应用格式化函数
+                    item['message'] = format_message_string(original_message, break_at=26)
+        # 如果JSON的顶层是一个字典，你可以在这里添加相应的处理逻辑
+        # elif isinstance(data, dict):
+        #     ...
+
+        # 将修改后的数据写回文件，保持格式
+        with open(file_path, 'w', encoding='utf-8') as f:
+            # ensure_ascii=False 确保中文字符不被转义
+            # indent=4 保持良好的缩进格式
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+    except json.JSONDecodeError as e:
+        print(f"  -> ERROR: Invalid JSON in {file_path}. Skipping file. Error: {e}")
+    except Exception as e:
+        print(f"  -> ERROR processing {file_path}. Error: {e}")
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Parse .json files and insert '\n' after every 26 visible characters in 'message' fields.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument('-f', '--folder', required=True, help="Path to the folder containing .json files.")
+    parser.add_argument('-r', '--recurse', action='store_true', help="Process files in subdirectories as well.")
+    parser.add_argument('-b', '--backup', action='store_true', help="Create a .bak backup for each modified file.")
+    
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.folder):
+        print(f"Error: Folder not found at '{args.folder}'")
+        return
+
+    print(f"Starting process in folder: {args.folder}")
+    print(f"Recursive: {args.recurse}, Create Backups: {args.backup}\n")
+    
+    files_to_process = []
+    if args.recurse:
+        for root, _, files in os.walk(args.folder):
+            for file in files:
+                if file.endswith('.json'):
+                    files_to_process.append(os.path.join(root, file))
+    else:
+        for item in os.listdir(args.folder):
+            full_path = os.path.join(args.folder, item)
+            if item.endswith('.json') and os.path.isfile(full_path):
+                files_to_process.append(full_path)
+
+    if not files_to_process:
+        print("No .json files found to process.")
+        return
+        
+    for file_path in files_to_process:
+        # 调用新的处理函数
+        process_json_file(file_path, create_backup=args.backup)
+
+    print("\nOperation complete.")
+
+if __name__ == "__main__":
+    main()
+	
+然后一步步倒回去就可以了。
