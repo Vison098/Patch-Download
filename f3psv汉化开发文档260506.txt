@@ -1,0 +1,36 @@
+https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%22131mlKfBSTaVx-vho9Dz_0raGRhgbBgHs%22%5D,%22action%22:%22open%22,%22userId%22:%22101061580246138169101%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing, https://drive.google.com/file/d/1TWp4n7bD4f-95nx3yUnbpNKPEkSXvewV/view?usp=sharing
+PCSG00493 使用vita3k 0.2.1运行（安装最新固件包）
+ZRIF：KO5ifR1dQ+d7BQBtNoHaYmJpDLLf0MjYxNQMQppbWBrg898ctmchz0S2cZU1OUfeDTgYORrjgxsAAI9KEyEA
+fafullfs-unpack.exe完成对dat1.dat的解包 
+.\quickbms.exe dsarc_fl.bms sinario.dat D:\BaiduNetdiskDownload\quick\sinario完成kigi.dat和sinario.dat的解包
+文本在kigi.dat和sinario.dat内，字库是font.bin和font_00-04.imy
+注意解包txt为JIS编码
+
+封回：
+把文本塞回 kigi.dat
+运行进阶注入器：
+在 QuickBMS 的文件夹里，找到并双击运行 reimport2.bat （或者 reimport3_localizations.bat，推荐先用 reimport2）。
+此时会弹出一个黑框，显示处于 Reimport2 模式。
+第一步选择：挑脚本
+弹出的第一个文件选择窗口，选中你的 dsarc_fl.bms。
+第二步选择：挑目标（大抽屉）
+弹出的第二个文件选择窗口，选中你那个原始未修改的 kigi.dat。
+第三步选择：挑修改内容（你要塞进去的东西）
+弹出的第三个窗口是让你选文件夹。选中你存放修改好 .txt 的那个文件夹（比如 kigi_extract），然后点击右下角的“保存”或“选择”。
+套娃封包（把 kigi.dat 塞回 dat1.dat）
+这游戏是俄罗斯套娃结构，你现在只是搞定了内层，还需要把它塞回最外层。
+注意：这一步和上面的操作一模一样，只是替换了对象。
+准备好原始未修改的 dat1.dat。
+再次双击运行 reimport2.bat。
+第一步：选中 FAFULLFS.bms 脚本。
+第二步：选中 原始的 dat1.dat。
+第三步：选中包含了你刚才新鲜出炉的新 kigi.dat 的那个文件夹。
+等待它将变大的 kigi.dat 注入回 dat1.dat 的末尾并重算指针。
+大功告成！现在，拿着这个最终生成的新 dat1.dat，扔进 Vita3K 的对应目录里去测试吧！
+
+尝试记录：
+psv夜回、深夜回的民汉采用的是font.tga
+psv萝洁有官方繁中，字库采取font.bin、font0-2.bin形式，曾打包封回替换，游戏内不显示字（这游戏字体好丑……）
+psv罪恶少女没有民汉，但其字库模式与本作一致
+对pc罪恶少女汉化补丁进行解包，汉化组疑似采用dll截断读取系统字库的模式，没有为游戏制作中文字库
+把罪恶少女的字库打包封回试了一下，只能显示一些意义不明的色块，估计是因为两字库图像大小不一致
